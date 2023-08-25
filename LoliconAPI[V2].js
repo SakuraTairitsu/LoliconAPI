@@ -29,7 +29,7 @@ const random_pic = [
 ]
 
 const NumReg = "[零一壹二两三四五六七八九十百千万亿\\d]+"
-let Lolicon_KEY = new RegExp(`^来\\s?(${NumReg})?(张|份|点)(.*)(涩|色|瑟)(图|圖)`)
+const Lolicon_KEY = new RegExp(`^来\\s?(${NumReg})?(张|份|点)(.*)(涩|色|瑟)(图|圖)`)
 
 export class LoliconAPI extends plugin {
     constructor() {
@@ -63,8 +63,7 @@ export class LoliconAPI extends plugin {
         let tag = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?(?:张|份|点)\|(?:涩|色|瑟)(?:图|圖)`, "g"), "")
         let num = e.msg.match(new RegExp(NumReg))
 
-        if (num) num = this.translateChinaNum(num[0])
-        else num = 1
+        if (num) { num = convertChineseNumberToArabic(num[0]) } else num = 1
 
         // 限制num最大值为20
         if (num > 20) {
@@ -75,7 +74,7 @@ export class LoliconAPI extends plugin {
             num = 1
         }
 
-        await e.reply("[LoliconAPI] 少女祈祷中…")
+        await e.reply("[LoliconAPI] 少女祈祷中…", false, { recallMsg: 30 })
 
         // 三元表达式
         let r18Value = e.isGroup ? (e.isMaster ? config.r18_Master : config.r18) : (e.isMaster ? config.r18_Master : 2)
@@ -86,9 +85,7 @@ export class LoliconAPI extends plugin {
             let response = await fetch(url)
 
             let result = await response.json()
-            if (Array.isArray(result.data) && result.data.length === 0) {
-                return e.reply("[LoliconAPI] 未获取到相关数据！")
-            }
+            if (Array.isArray(result.data) && result.data.length === 0) return e.reply("[LoliconAPI] 未获取到相关数据！")
 
             let msgs = []
             let successCount = 0
@@ -103,7 +100,7 @@ export class LoliconAPI extends plugin {
                             "画师：" + item.author + "\n",
                             "Pid：" + item.pid + "\n",
                             "R18：" + item.r18 + "\n",
-                            "Tag：" + item.tags.join("，") + "\n",
+                            "Tags：" + item.tags.join("，") + "\n",
                             segment.image(item.urls.original)
                         ]
                         msgs.push(msg)
@@ -112,129 +109,23 @@ export class LoliconAPI extends plugin {
                         // 如果图片 URL 无效，可以在这里添加操作（懒得写了
                     }
                 } catch (error) {
-                    console.error(error)
+                    logger.warn(error)
                 }
             }
 
             // 图片仅有一张且失败的处理
-            if (successCount === 0 && failureCount === 1) return e.reply("[LoliconAPI] 获取图片失败！")
+            if (successCount === 0 && failureCount === 1) return e.reply('[LoliconAPI] 获取图片失败！', false, { recallMsg: 120 })
 
-            // 图片仅有一张就不输出这条了，碍眼
-            if (!(successCount === 1 && failureCount === 0)) msgs.push(`[LoliconAPI] 获取图片成功 ${successCount} 张，失败 ${failureCount} 张~`)
+            // 为获取图片不全的数组添加提示信息，但所有图片都获取成功时，不显示成功和失败数量（不想尾部添加提示信息注释掉本行代码即可
+            if (failureCount > 0) msgs.push(`[LoliconAPI] 获取图片成功 ${successCount} 张，失败 ${failureCount} 张~`)
 
             // 制作并发送转发消息
-            await e.reply(await this.makeForwardMsg(e, msgs))
+            return e.reply(await makeForwardMsg(e, msgs, '[-----LoliconAPI-----]'))
         } catch (error) {
             // 错误信息
-            console.error(error)
-            await e.reply("[LoliconAPI] 请检查网络环境！")
+            logger.warn(error)
+            return e.reply("[LoliconAPI] 请检查网络环境！")
         }
-    }
-
-    /**
-     * 制作转发消息
-     * @param {Array} msgs 转发内容
-     */
-    async makeForwardMsg(e, msgs) {
-        /** 转发人昵称 */
-        let nickname = e.nickname
-        /** 转发人QQ */
-        let user_id = e.user_id
-
-        let userInfo = {
-            user_id,
-            nickname
-        }
-
-        let forwardMsg = []
-        for (let msg of msgs) {
-            forwardMsg.push({
-                ...userInfo,
-                message: msg
-            })
-        }
-
-        /** 制作转发内容 */
-        if (this.e.isGroup) {
-            forwardMsg = await this.e.group.makeForwardMsg(forwardMsg)
-        } else {
-            forwardMsg = await this.e.friend.makeForwardMsg(forwardMsg)
-        }
-
-        /** 处理描述 */
-        forwardMsg.data = forwardMsg.data
-            .replace(/\n/g, "")
-            .replace(/<title color="#777777" size="26">(.+?)<\/title>/g, "___")
-            .replace(/___+/, `<title color="#777777" size="26">[-----LoliconAPI-----]</title>`)
-        return forwardMsg
-    }
-
-    // ------------------------------------------------- 以下代码copy自椰羊，仅做略微修改 -------------------------------------------------
-
-    /**
-     * @description: 使用JS将数字从汉字形式转化为阿拉伯形式
-     * @param {string} convert
-     * @return {number}
-     */
-    translateChinaNum(convert) {
-        if (!convert && convert != 0) return convert
-        // 如果是纯数字直接返回
-        if (/^\d+$/.test(convert)) return Number(convert)
-        // 字典
-        let map = new Map()
-        map.set("一", 1)
-        map.set("壹", 1) // 特殊
-        map.set("二", 2)
-        map.set("两", 2) // 特殊
-        map.set("三", 3)
-        map.set("四", 4)
-        map.set("五", 5)
-        map.set("六", 6)
-        map.set("七", 7)
-        map.set("八", 8)
-        map.set("九", 9)
-        // 按照亿、万为分割将字符串划分为三部分
-        let split = ""
-        split = convert.split("亿")
-        let s_1_23 = split.length > 1 ? split : ["", convert]
-        let s_23 = s_1_23[1]
-        let s_1 = s_1_23[0]
-        split = s_23.split("万")
-        let s_2_3 = split.length > 1 ? split : ["", s_23]
-        let s_2 = s_2_3[0]
-        let s_3 = s_2_3[1]
-        let arr = [s_1, s_2, s_3]
-
-        // -------------------------------------------------- 对各个部分处理 --------------------------------------------------
-        arr = arr.map(item => {
-            let result = ""
-            result = item.replace("零", "")
-            // [ "一百三十二", "四千五百", "三千二百一十三" ] ==>
-            let reg = new RegExp(`[${Array.from(map.keys()).join("")}]`, "g")
-            result = result.replace(reg, substring => {
-                return map.get(substring)
-            })
-            // [ "1百3十2", "4千5百", "3千2百1十3" ] ==> ["0132", "4500", "3213"]
-            let temp
-            temp = /\d(?=千)/.exec(result)
-            let thousand = temp ? temp[0] : "0"
-            temp = /\d(?=百)/.exec(result)
-            let hundred = temp ? temp[0] : "0"
-            temp = /\d?(?=十)/.exec(result)
-            let ten
-            if (temp === null) { // 说明没十：一百零二
-                ten = "0"
-            } else if (temp[0] === "") { // 说明十被简写了：十一
-                ten = "1"
-            } else { // 正常情况：一百一十一
-                ten = temp[0]
-            }
-            temp = /\d$/.exec(result)
-            let num = temp ? temp[0] : "0"
-            return thousand + hundred + ten + num
-        })
-        // 借助parseInt自动去零
-        return parseInt(arr.join(""))
     }
 }
 
@@ -243,6 +134,111 @@ async function checkImageURL(url) {
         let response = await fetch(url, { method: "HEAD" })
         return response.ok
     } catch (error) {
+        logger.warn(error)
         return false
     }
+}
+
+async function makeForwardMsg(e, msg = [], dec = '') {
+    if (!Array.isArray(msg)) msg = [msg]
+
+    let userInfo = {
+        user_id: e.user_id,
+        nickname: e.nickname
+    }
+
+    let forwardMsg = []
+    for (const message of msg) {
+        if (!message) continue
+        forwardMsg.push({
+            ...userInfo,
+            message: message
+        })
+    }
+
+    /** 制作转发内容 */
+    if (e?.group?.makeForwardMsg) {
+        forwardMsg = await e.group.makeForwardMsg(forwardMsg)
+    } else if (e?.friend?.makeForwardMsg) {
+        forwardMsg = await e.friend.makeForwardMsg(forwardMsg)
+    } else {
+        return msg.join('\n')
+    }
+
+    if (dec) {
+        /** 处理描述 */
+        if (typeof (forwardMsg.data) === 'object') {
+            let detail = forwardMsg.data?.meta?.detail
+            if (detail) detail.news = [{ text: dec }]
+        } else {
+            forwardMsg.data = forwardMsg.data
+                .replace(/\n/g, '')
+                .replace(/<title color="#777777" size="26">(.+?)<\/title>/g, '___')
+                .replace(/___+/, `<title color="#777777" size="26">${dec}</title>`)
+        }
+    }
+    return forwardMsg
+}
+
+/**
+ * @description: 使用JS将数字从汉字形式转化为阿拉伯形式
+ * @param {string} convert
+ * @return {number}
+ */
+function convertChineseNumberToArabic(input) {
+    if (!input && input != 0) return input
+    // 如果是纯数字直接返回
+    if (/^\d+$/.test(input)) return Number(input)
+    // 字典
+    let dictionary = new Map()
+    dictionary.set('一', 1)
+    dictionary.set('壹', 1) // 特殊
+    dictionary.set('二', 2)
+    dictionary.set('两', 2) // 特殊
+    dictionary.set('三', 3)
+    dictionary.set('四', 4)
+    dictionary.set('五', 5)
+    dictionary.set('六', 6)
+    dictionary.set('七', 7)
+    dictionary.set('八', 8)
+    dictionary.set('九', 9)
+    // 按照亿、万为分割将字符串划分为三部分
+    let splitString = ''
+    splitString = input.split('亿')
+    let billionAndRest = splitString.length > 1 ? splitString : ['', input]
+    let rest = billionAndRest[1]
+    let billion = billionAndRest[0]
+    splitString = rest.split('万')
+    let tenThousandAndRemainder = splitString.length > 1 ? splitString : ['', rest]
+    let tenThousand = tenThousandAndRemainder[0]
+    let remainder = tenThousandAndRemainder[1]
+    let parts = [billion, tenThousand, remainder]
+
+    parts = parts.map(item => {
+        let result = ''
+        result = item.replace('零', '')
+        let reg = new RegExp(`[${Array.from(dictionary.keys()).join('')}]`, 'g')
+        result = result.replace(reg, substring => {
+            return dictionary.get(substring)
+        })
+        let temp
+        temp = /\d(?=千)/.exec(result)
+        let thousand = temp ? temp[0] : '0'
+        temp = /\d(?=百)/.exec(result)
+        let hundred = temp ? temp[0] : '0'
+        temp = /\d?(?=十)/.exec(result)
+        let ten
+        if (temp === null) {
+            ten = '0'
+        } else if (temp[0] === '') {
+            ten = '1'
+        } else {
+            ten = temp[0]
+        }
+        temp = /\d$/.exec(result)
+        let num = temp ? temp[0] : '0'
+        return thousand + hundred + ten + num
+    })
+    // 借助parseInt自动去零
+    return parseInt(parts.join(''))
 }
