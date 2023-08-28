@@ -470,38 +470,39 @@ export class makeFace extends plugin {
 
 async function generateCertificate(e, type, url) {
     try {
-    // 艾特对象为Bot终止运行
-    if (e.atBot) return false
-    // 消息中包含@某人的操作
-    if ((e.message[0] && e.message[0].type == 'at') || (e.message[1] && e.message[1].type == 'at')) {
-        if (type === '老婆证') {
-            return await detection(e, `${url}?qq=${e.at}&qq2=${e.user_id}&key=${Key}`)
-        } else if (type === '老公证') {
-            return await detection(e, `${url}?qq=${e.user_id}&qq2=${e.at}&key=${Key}`)
-        } else {
-            return await detection(e, `${url}?qq=${e.at}&key=${Key}`)
+        // 艾特对象为Bot终止运行
+        if (e.atBot) return false
+        // 消息中包含@某人的操作
+        if ((e.message[0] && e.message[0].type == 'at') || (e.message[1] && e.message[1].type == 'at')) {
+            if (type === '老婆证') {
+                return await detection(e, `${url}?qq=${e.at}&qq2=${e.user_id}&key=${Key}`)
+            } else if (type === '老公证') {
+                return await detection(e, `${url}?qq=${e.user_id}&qq2=${e.at}&key=${Key}`)
+            } else {
+                return await detection(e, `${url}?qq=${e.at}&key=${Key}`)
+            }
         }
-    }
-    // replace方法替换字符串
-    let QQNumber = e.msg.replace(new RegExp(`^((.*)${type}|${type}(.*))$`), '$2$3')
-    // 自动去空格
-    QQNumber = QQNumber.replace(/ /g, '')
-    // 限制长度至少为5且最长为10
-    if (Number.isInteger(Number(QQNumber)) && QQNumber.length >= 5 && QQNumber.length <= 10) {
-        // 请求
-        if (type === '老婆证') {
-            return await detection(e, `${url}?qq=${QQNumber}&qq2=${e.user_id}&key=${Key}`)
-        } else if (type === '老公证') {
-            return await detection(e, `${url}?qq=${e.user_id}&qq2=${QQNumber}&key=${Key}`)
+        // replace方法替换字符串
+        let QQNumber = e.msg.replace(new RegExp(`^((.*)${type}|${type}(.*))$`), '$2$3')
+        // 自动去空格
+        QQNumber = QQNumber.replace(/ /g, '')
+        // 限制长度至少为5且最长为10
+        if (Number.isInteger(Number(QQNumber)) && QQNumber.length >= 5 && QQNumber.length <= 10) {
+            // 请求
+            if (type === '老婆证') {
+                return await detection(e, `${url}?qq=${QQNumber}&qq2=${e.user_id}&key=${Key}`)
+            } else if (type === '老公证') {
+                return await detection(e, `${url}?qq=${e.user_id}&qq2=${QQNumber}&key=${Key}`)
+            } else {
+                return await detection(e, `${url}?qq=${QQNumber}&key=${Key}`)
+            }
         } else {
-            return await detection(e, `${url}?qq=${QQNumber}&key=${Key}`)
+            return false
         }
-    } else {
+    } catch (error) {
+        logger.warn(error)
         return false
     }
-} catch {
-    return false
-}
 }
 
 async function detection(e, imageUrl) {
@@ -512,10 +513,18 @@ async function detection(e, imageUrl) {
             logger.info(imageUrl)
             return e.reply(segment.image(imageUrl))
         } else {
-            logger.warn('请检查网络环境，大概率API寄了！')
-            return false
+            otherImageUrl = imageUrl.replace('api.lolimi.cn', 'api.caonm.net')
+            const response = await fetch(otherImageUrl)
+            if (response.ok) {
+                logger.info(imageUrl)
+                return e.reply(segment.image(otherImageUrl))
+            } else {
+                logger.warn('请检查网络环境！')
+                return false
+            }
         }
-    } catch {
+    } catch (error) {
+        logger.warn(error)
         return false
     }
 }
