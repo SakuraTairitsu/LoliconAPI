@@ -1,4 +1,5 @@
 import plugin from '../../lib/plugins/plugin.js'
+import fetch from 'node-fetch'
 
 // 填写你的API密钥，在https://api.lolimi.cn获取（免费的
 const Key = ''
@@ -20,6 +21,10 @@ export class makeFace extends plugin {
                 {
                     reg: '^猫羽雫?(.*)气象$',
                     fnc: 'Weather'
+                },
+                {
+                    reg: '^二维码生成(.*)$',
+                    fnc: 'Code'
                 },
                 {
                     reg: '^日历$',
@@ -48,10 +53,6 @@ export class makeFace extends plugin {
                 {
                     reg: '^小(c|C)酱$',
                     fnc: 'Small_C'
-                },
-                {
-                    reg: '^二维码生成(.*)$',
-                    fnc: 'Code'
                 },
                 {
                     reg: '^(.*)处男证|处男证(.*)$',
@@ -166,6 +167,22 @@ export class makeFace extends plugin {
                     fnc: 'Death'
                 },
                 {
+                    reg: '^(.*)想|想(.*)$',
+                    fnc: 'Want'
+                },
+                {
+                    reg: '^(.*)鸠|鸠(.*)$',
+                    fnc: 'Phigros'
+                },
+                {
+                    reg: '^(.*)看|看(.*)$',
+                    fnc: 'Look'
+                },
+                {
+                    reg: '^(.*)嗯|嗯(.*)$',
+                    fnc: 'En'
+                },
+                {
                     reg: '^美女举牌(.*)$',
                     fnc: 'MM_Card'
                 },
@@ -215,6 +232,12 @@ export class makeFace extends plugin {
         return false
     }
 
+    // 二维码生成
+    async Code(e) {
+        const text = e.msg.replace(/二维码生成/g, '')
+        if (text) return await detection(e, `https://api.starchent.top/API/ewm.php?text=${text}&size=512`)
+    }
+
     // 日历
     async Mouth(e) {
         return await detection(e, `https://api.lolimi.cn/api/ri/li?key=${Key}`)
@@ -248,12 +271,6 @@ export class makeFace extends plugin {
     // 小C酱
     async Small_C(e) {
         return await detection(e, `https://api.lolimi.cn/api/xc/index?key=${Key}`)
-    }
-
-    // 二维码生成
-    async Code(e) {
-        let text = e.msg.replace(/二维码生成/g, '')
-        if (text) return await detection(e, `https://api.starchent.top/API/ewm.php?text=${text}&size=512`)
     }
 
     // 处男证
@@ -396,6 +413,26 @@ export class makeFace extends plugin {
         return generateCertificate(e, '奠', 'https://api.lolimi.cn/api/zt/ji')
     }
 
+    // 想
+    async Want(e) {
+        return generateCertificate(e, '想', 'https://api.lolimi.cn/api/xiang/x_1')
+    }
+
+    // 鸠
+    async Phigros(e) {
+        return generateCertificate(e, '鸠', 'https://api.lolimi.cn/api/kan/kan')
+    }
+
+    // 看
+    async Look(e) {
+        return generateCertificate(e, '看', 'https://api.lolimi.cn/api/kan/kan_3')
+    }
+
+    // 嗯
+    async En(e) {
+        return generateCertificate(e, '嗯', 'https://api.lolimi.cn/api/kan/kan_4')
+    }
+
     // 美女举牌
     async MM_Card(e) {
         let match = e.msg.match(/^美女举牌(.*)$/)
@@ -432,6 +469,7 @@ export class makeFace extends plugin {
 }
 
 async function generateCertificate(e, type, url) {
+    try {
     // 艾特对象为Bot终止运行
     if (e.atBot) return false
     // 消息中包含@某人的操作
@@ -461,15 +499,23 @@ async function generateCertificate(e, type, url) {
     } else {
         return false
     }
+} catch {
+    return false
+}
 }
 
 async function detection(e, imageUrl) {
-    if (Key === '') return logger.warn('[WARN] 未填写API密钥！')
-    const response = await fetch(imageUrl)
-    if (response.ok) {
-        return e.reply(segment.image(imageUrl))
-    } else {
-        logger.warn('[WARN] 请检查网络环境，大概率API寄了！')
+    try {
+        if (Key === '') return logger.warn('未填写API密钥！')
+        const response = await fetch(imageUrl)
+        if (response.ok) {
+            logger.info(imageUrl)
+            return e.reply(segment.image(imageUrl))
+        } else {
+            logger.warn('请检查网络环境，大概率API寄了！')
+            return false
+        }
+    } catch {
         return false
     }
 }
