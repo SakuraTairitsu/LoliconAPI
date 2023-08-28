@@ -56,13 +56,13 @@ export class LoliconAPI extends plugin {
 
     async setu(e) {
         // 检测是否处于CD中
-        let CDTIME = await redis.get(`LoliconAPI_${e.group_id}_CD`)
+        const CDTIME = await redis.get(`LoliconAPI_${e.group_id}_CD`)
         if (CDTIME && !e.isMaster) return e.reply("「冷却中」先生，冲太快会炸膛！")
-        let GetTime = moment(new Date()).format("YYYY-MM-DD HH:mm:ss")
+        const GetTime = moment(new Date()).format("YYYY-MM-DD HH:mm:ss")
         await redis.set(`LoliconAPI_${e.group_id}_CD`, GetTime, { EX: config.CD })
 
-        let tag = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?(?:张|份|点)\|(?:涩|色|瑟)(?:图|圖)`, "g"), "")
-        let num = e.msg.match(new RegExp(NumReg))
+        const tag = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?(?:张|份|点)\|(?:涩|色|瑟)(?:图|圖)`, "g"), "")
+        var num = e.msg.match(new RegExp(NumReg))
 
         if (num) { num = convertChineseNumberToArabic(num[0]) } else num = 1
 
@@ -78,57 +78,46 @@ export class LoliconAPI extends plugin {
         await e.reply("[LoliconAPI] 少女祈祷中…", false, { recallMsg: 30 })
 
         // 三元表达式
-        let r18Value = e.isGroup ? (e.isMaster ? config.r18_Master : config.r18) : (e.isMaster ? config.r18_Master : 2)
-        let tagValue = tag || lodash.sample(random_pic)
-        let url = `https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}&tag=${tagValue}&excludeAI=${config.excludeAI}&num=${num}`
+        const r18Value = e.isGroup ? (e.isMaster ? config.r18_Master : config.r18) : (e.isMaster ? config.r18_Master : 2)
+        const tagValue = tag || lodash.sample(random_pic)
+        const url = `https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}&tag=${tagValue}&excludeAI=${config.excludeAI}&num=${num}`
 
         try {
-            let response = await fetch(url)
+            const response = await fetch(url)
 
-            let result = await response.json()
+            const result = await response.json()
             if (Array.isArray(result.data) && result.data.length === 0) return e.reply("[LoliconAPI] 未获取到相关数据！")
 
+            let imageUrl
             let msgs = []
             let successCount = 0
             let failureCount = 0
-            for (let item of result.data) {
+
+            for (const item of result.data) {
                 try {
-                    let isValid = await checkImageURL(item.urls.original)
+                    const isValid = await checkImageURL(item.urls.original)
                     if (isValid) {
                         successCount++
 
-                        // 获取图片URL
-                        const imageUrl = item.urls.original
-
                         if (!e.isGroup) {
-                            let msg = [
-                                '标题：' + item.title + '\n',
-                                '画师：' + item.author + '\n',
-                                'Pid：' + item.pid + '\n',
-                                'R18：' + item.r18 + '\n',
-                                'Tags：' + item.tags.join('，') + '\n',
-                                segment.image(imageUrl)
-                            ]
-                            msgs.push(msg)
+                            imageUrl = item.urls.original
                         } else {
                             // 获取图片数据
-                            const response = await fetch(imageUrl)
+                            const response = await fetch(item.urls.original)
                             const imageData = await response.arrayBuffer()
                             // 处理图片数据
                             logger.info('正在处理图片…')
-                            const processedImageData = await processImage(imageData)
-
-                            // 构建一条包含处理后的图片的消息
-                            let msg = [
-                                '标题：' + item.title + '\n',
-                                '画师：' + item.author + '\n',
-                                'Pid：' + item.pid + '\n',
-                                'R18：' + item.r18 + '\n',
-                                'Tags：' + item.tags.join('，') + '\n',
-                                segment.image(processedImageData)
-                            ]
-                            msgs.push(msg)
+                            imageUrl = await processImage(imageData)
                         }
+                        const msg = [
+                            '标题：' + item.title + '\n',
+                            '画师：' + item.author + '\n',
+                            'Pid：' + item.pid + '\n',
+                            'R18：' + item.r18 + '\n',
+                            'Tags：' + item.tags.join('，') + '\n',
+                            segment.image(imageUrl)
+                        ]
+                        msgs.push(msg)
                     } else {
                         failureCount++
                         // 如果图片 URL 无效，可以在这里添加操作（懒得写了
@@ -156,7 +145,7 @@ export class LoliconAPI extends plugin {
 
 async function checkImageURL(url) {
     try {
-        let response = await fetch(url, { method: "HEAD" })
+        const response = await fetch(url, { method: "HEAD" })
         return response.ok
     } catch (error) {
         logger.warn(error)
@@ -167,7 +156,7 @@ async function checkImageURL(url) {
 async function makeForwardMsg(e, msg = [], dec = '') {
     if (!Array.isArray(msg)) msg = [msg]
 
-    let userInfo = {
+    const userInfo = {
         user_id: e.user_id,
         nickname: e.nickname
     }
@@ -208,13 +197,13 @@ async function makeForwardMsg(e, msg = [], dec = '') {
 async function processImage(imageData) {
     try {
         // 获取图片元数据
-        let metadata = await sharp(imageData).metadata()
+        const metadata = await sharp(imageData).metadata()
 
         // 定义一个数组，包含所有可能的修改选项
-        let options = ['brightness', 'contrast', 'saturation', 'hue', 'width', 'height']
+        const options = ['brightness', 'contrast', 'saturation', 'hue', 'width', 'height']
 
         // 随机选择一个选项
-        let option = options[Math.floor(Math.random() * options.length)]
+        const option = options[Math.floor(Math.random() * options.length)]
 
         // 根据选择的选项进行修改
         switch (option) {
@@ -236,12 +225,12 @@ async function processImage(imageData) {
                 break
             case 'width':
                 // 修改宽度
-                let newWidth = metadata.width - 1 + Math.floor(Math.random() * 2)
+                const newWidth = metadata.width - 1 + Math.floor(Math.random() * 2)
                 imageData = await sharp(imageData).resize(newWidth, null, { withoutEnlargement: true }).toBuffer()
                 break
             case 'height':
                 // 修改高度
-                let newHeight = metadata.height - 1 + Math.floor(Math.random() * 2)
+                const newHeight = metadata.height - 1 + Math.floor(Math.random() * 2)
                 imageData = await sharp(imageData).resize(null, newHeight, { withoutEnlargement: true }).toBuffer()
                 break
         }
