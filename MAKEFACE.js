@@ -196,15 +196,18 @@ export class makeFace extends plugin {
 
     /** 刷听歌时长 */
     async Music(e) {
-        if (Key === '') return logger.warn('[WARN] 未填写API密钥！')
+        if (Key === '') return logger.warn('未填写API密钥！')
+        if (!e.isMaster && await checkCooldown(e, 'MusicTime', 15)) return false
+        let response, msg
         /** 判断是否为好友 */
         if (!(e.bot ?? Bot).fl.get(e.user_id)) {
-            const response = await fetch(`https://api.lolimi.cn/api/pa/pa?qq=${e.user_id}&key=${Key}`)
-            let msg
+            const url = `https://api.lolimi.cn/api/kan/kan_2?qq=${e.user_id}&key=${Key}`
+            response = await fetch(url)
+            if (!response.ok) response = await fetch(`https://api.caonm.net/api/kan/kan_2?qq=${e.user_id}&key=${Key}`)
             if (response.ok) {
                 msg = [
                     segment.at(e.user_id),
-                    segment.image(`https://api.lolimi.cn/api/pa/pa?qq=${e.user_id}&key=${Key}`)
+                    segment.image(response.url)
                 ]
             } else {
                 msg = [
@@ -214,19 +217,25 @@ export class makeFace extends plugin {
             }
             return e.reply(msg)
         } else {
-            const response = await fetch(`https://api.lolimi.cn/api/qq/mus?qq=${e.user_id}&key=${Key}`)
-            if (!response.ok) return false
+            let url = `https://api.lolimi.cn/api/qq/mus?qq=${e.user_id}&key=${Key}`
+            response = await fetch(url)
+            if (!response.ok) {
+                url = `https://api.caonm.net/api/qq/mus?qq=${e.user_id}&key=${Key}`
+                response = await fetch(url)
+                if (!response.ok) return false
+            }
             let text = await response.text()
-            text = text.replace(`QQ：${e.user_id}`, `QQ：${e.nickname}(${e.user_id})`).replace('运行结果： ', '运行结果：').replace('成功！', '成功！\n').replace('已经', '已')
+            text = text.replace(`QQ：${e.user_id}`, `QQ：${e.nickname}(${e.user_id})`).replace('已经', '已')
             return e.reply(text, true, { recallMsg: 120 })
         }
     }
 
     // 猫羽雫天气
     async Weather(e) {
-        let position = e.msg.match(new RegExp('^猫羽雫?(.*)气象$'))
+        if (Key === '') return logger.warn('未填写API密钥！')
+        const position = e.msg.match(new RegExp('^猫羽雫?(.*)气象$'))
         if (position) {
-            let district = position[1]
+            const district = position[1]
             return await detection(e, `https://api.lolimi.cn/api/qqtq/t?msg=${district}&key=${Key}`)
         }
         return false
@@ -435,13 +444,14 @@ export class makeFace extends plugin {
 
     // 美女举牌
     async MM_Card(e) {
-        let match = e.msg.match(/^美女举牌(.*)$/)
+        if (Key === '') return logger.warn('未填写API密钥！')
+        const match = e.msg.match(/^美女举牌(.*)$/)
         if (match) {
-            let content = match[1].trim()
-            let msgs = content.split(' ')
+            const content = match[1].trim()
+            const msgs = content.split(' ')
             if (msgs.length < 1) return
             if (msgs.length <= 3 && msgs.every(msg => msg.length <= 5)) {
-                let msg = msgs.join('[换行]')
+                const msg = msgs.join('[换行]')
                 return await detection(e, `https://api.lolimi.cn/api/jupai/j?msg=${encodeURIComponent(msg)}&key=${Key}`)
             }
         }
@@ -450,15 +460,13 @@ export class makeFace extends plugin {
 
     // 黑丝举牌
     async HS_Card(e) {
-        let match = e.msg.match(/^黑丝举牌(.*)$/)
+        const match = e.msg.match(/^黑丝举牌(.*)$/)
         if (match) {
-            let content = match[1].trim()
-            if (content === '') {
-                return e.reply('[WARN] 请输入举牌内容！')
-            }
-            let msgs = content.split(' ')
+            const content = match[1].trim()
+            if (content === '') return e.reply('[WARN] 请输入举牌内容！')
+            const msgs = content.split(' ')
             if (msgs.length <= 3 && msgs.every(msg => msg.length <= 5)) {
-                let msg = msgs.map((msg, index) => `&msg${index === 0 ? '' : index}=${msg}`).join('')
+                const msg = msgs.map((msg, index) => `&msg${index === 0 ? '' : index}=${msg}`).join('')
                 return await detection(e, `https://api.starchent.top/API/hsjp.php?rgb1=0&rgb2=0&rgb3=0${msg}`)
             } else {
                 return e.reply('[WARN] 字数超出限制或格式错误！')
@@ -525,6 +533,21 @@ async function detection(e, imageUrl) {
         }
     } catch (error) {
         logger.warn(error)
+        return false
+    }
+}
+
+async function checkCooldown(e, command, cooldownTime) {
+    try {
+        const CDTIME = await redis.get(`${command}_${e.group_id}_${e.user_id}_CD`)
+        if (CDTIME) {
+            const remainingTime = cooldownTime - (moment().unix() - moment(CDTIME, 'YYYY-MM-DD HH:mm:ss').unix())
+            return e.reply(`操作频繁，请等待 ${remainingTime} 秒！`)
+        }
+        const GetTime = moment(new Date()).format('YYYY-MM-DD HH:mm:ss')
+        await redis.set(`${command}_${e.group_id}_${e.user_id}_CD`, GetTime, { EX: cooldownTime })
+    } catch (err) {
+        logger.warn(err)
         return false
     }
 }
