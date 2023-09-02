@@ -1,5 +1,6 @@
 import plugin from '../../lib/plugins/plugin.js'
 import fetch from 'node-fetch'
+import moment from 'moment'
 
 // 填写你的API密钥，在https://api.lolimi.cn获取（免费的
 const Key = ''
