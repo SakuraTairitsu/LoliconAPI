@@ -50,33 +50,34 @@ Download或者Copy本目录下的LoliconAPI.js放入plugins/example即可
 ## 命令列表
 <details>
 
-- **来份涩图**：返回随机(萝莉)图片
-- **来3份涩图**：返回多张随机(萝莉)图片
+- **来份涩图**：返回随机(<s>萝莉</s>)图片
+- **来3份涩图**：返回多张随机(<s>萝莉</s>)图片
 - **来份碧蓝档案涩图**：返回指定tag图片（可使用“|”分隔tag，最多三个
 - **来3份碧蓝档案涩图**：返回多张指定tag图片（可使用“|”分隔tag，最多三个
 
 </details>
-<details>
- <summary>椰奶插件</summary> 
 
-- 官网：[Yenai-plugin](https://www.yenai.ren/)
-- Gitee：[Yenai-plugin](https://gitee.com/yeyang52/yenai-plugin)&nbsp;&nbsp;(作者：[@椰羊](https://gitee.com/yeyang52))
-- Github：[Yenai-plugin](https://github.com/yeyang52/yenai-plugin)&nbsp;&nbsp;(作者：[@椰羊](https://github.com/yeyang52))
+### 传送门
+<details>
+ <summary>[椰奶插件](https://www.yenai.ren/)(作者：[@椰羊](https://gitee.com/yeyang52))</summary> 
+
+- Gitee：[Yenai-plugin](https://gitee.com/yeyang52/yenai-plugin)&nbsp;&nbsp;
+- Github：[Yenai-plugin](https://github.com/yeyang52/yenai-plugin)&nbsp;&nbsp;
 
 </details>
 
 <details>
- <summary>Miao-Yunzai&nbsp;&nbsp;传送门</summary> 
+ <summary>Miao-Yunzai&nbsp;&nbsp;(作者：[@喵喵](https://gitee.com/yoimiya-kokomi))</summary> 
 
-- Gitee：[Miao-Yunzai](https://gitee.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;(作者：[@喵喵](https://gitee.com/yoimiya-kokomi))
-- Github：[Miao-Yunzai](https://github.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;(作者：[@喵喵](https://github.com/yoimiya-kokomi))
+- Gitee：[Miao-Yunzai](https://gitee.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;
+- Github：[Miao-Yunzai](https://github.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;
 
 </details>
 
 <details>
- <summary>Yunzai-Bot&nbsp;&nbsp;传送门</summary> 
+ <summary>Yunzai-Bot&nbsp;&nbsp;(作者：[@Le-niao](https://gitee.com/Le-niao))</summary> 
 
-- Gitee：[Yunzai-Bot](https://gitee.com/Le-niao/Yunzai-Bot)&nbsp;&nbsp;(作者：[@Le-niao](https://gitee.com/Le-niao))
+- Gitee：[Yunzai-Bot](https://gitee.com/Le-niao/Yunzai-Bot)&nbsp;&nbsp;
 
 </details>
 
