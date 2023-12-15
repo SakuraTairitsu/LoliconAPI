@@ -57,30 +57,6 @@ Download或者Copy本目录下的LoliconAPI.js放入plugins/example即可
 
 </details>
 
-### 传送门
-<details>
- <summary>[椰奶插件](https://www.yenai.ren/)(作者：[@椰羊](https://gitee.com/yeyang52))</summary> 
-
-- Gitee：[Yenai-plugin](https://gitee.com/yeyang52/yenai-plugin)&nbsp;&nbsp;
-- Github：[Yenai-plugin](https://github.com/yeyang52/yenai-plugin)&nbsp;&nbsp;
-
-</details>
-
-<details>
- <summary>Miao-Yunzai&nbsp;&nbsp;(作者：[@喵喵](https://gitee.com/yoimiya-kokomi))</summary> 
-
-- Gitee：[Miao-Yunzai](https://gitee.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;
-- Github：[Miao-Yunzai](https://github.com/yoimiya-kokomi/Miao-Yunzai)&nbsp;&nbsp;
-
-</details>
-
-<details>
- <summary>Yunzai-Bot&nbsp;&nbsp;(作者：[@Le-niao](https://gitee.com/Le-niao))</summary> 
-
-- Gitee：[Yunzai-Bot](https://gitee.com/Le-niao/Yunzai-Bot)&nbsp;&nbsp;
-
-</details>
-
 ## 特别鸣谢
 字典源码取自[Yenai-plugin](https://www.yenai.ren/)插件（作者[@椰羊](https://gitee.com/yeyang52)）
 <div><img width="1080" src="res/face.jpg" alt="face"><div>
