@@ -36,12 +36,29 @@
 
 </details>
 
+## V3安装：
+
+###使用github源
+
+在云崽根目录下运行
 
 
-## 使用方法
+```
+curl -o ./plugins/example/LoliconAPI[V3].js https://raw.githubusercontent.com/SakuraTairitsu/LoliconAPI/main/LoliconAPI%5BV3%5D.js
+pnpm install sharp@latest -w
+```
+
+###使用gitee源（推荐）
+
+在云崽根目录下运行
+
+```
+curl -o ./plugins/example/LoliconAPI[V3].js https://gitee.com/SakuraTairitsu/LoliconAPI/raw/main/LoliconAPI%5BV3%5D.js
+pnpm install sharp@latest -w
+```
+
+###手动安装
 Download或者Copy本目录下的LoliconAPI.js放入plugins/example即可
-
-
 
 <details>
  <summary>椰奶插件</summary> 
