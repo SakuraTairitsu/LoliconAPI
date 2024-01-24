@@ -11,10 +11,10 @@ import sharp from 'sharp'
 --------------------[依赖安装命令pnpm add sharp@latest -w]--------------------
 ***** Author(CN)：枫[MAPLE]
 ***** Contact(QQ)：2523148477
-***** 任何有关插件本体的意外报错都可以提起issues，或通过联系方式（QQ直接问我
+***** 任何有关插件本体的意外报错都可以提issues，或通过联系方式（QQ直接问我
 ***** 个人觉得代码考虑比较全面，但防呆不防傻——请不要搞一些脑血栓操作恶意引起错误
 ***** 取图速度足够优化非代码问题，若你有稳定反代+魔法那么取单张图仅需七八秒（私聊
-***** 取图失败非代码问题因API提供的图链失效导致，请不要提这个问题（虽然我能优化逻辑
+***** 取图失败非代码问题因API提供图链失效导致，请不要提这个问题（虽然我能优化逻辑
 -----------------------------------------------------------------------------
 */
 
@@ -26,7 +26,7 @@ const config = {
     /** 设置图片地址所使用的在线反代服务，默认i.pixiv.re（出图真的慢，建议自行搭建反代使用魔法 */
     proxy: 'i.pixiv.re',
 
-    /** 设置代理地址（没有可不填，但填上面的反代如果大陆访问不了就得填嗷 */
+    /** 设置代理地址（没有可不填，默认为空字符串，但填上面的反代如果大陆访问不了就得填嗷 */
     proxyAddress: '',
 
     /** 返回图片的规格 */
@@ -53,7 +53,7 @@ const random_pic = [
 
 const Plugin_name = 'LoliconAPI'
 const NumReg = '[零一壹二贰两三叁四肆五伍六陆七柒八捌九玖十拾百佰千仟万亿\\d]+'
-const Lolicon_KEY = new RegExp(`^来\\s?(${NumReg})?[张份点](.*)[涩色瑟][图圖]`)
+const Regular = new RegExp(`^来\\s?(${NumReg})?[张份点](.*)[涩色瑟][图圖]`)
 
 export class LoliconAPI extends plugin {
     constructor() {
@@ -68,7 +68,7 @@ export class LoliconAPI extends plugin {
             priority: 0,
             rule: [{
                 /** 命令正则匹配 */
-                reg: Lolicon_KEY,
+                reg: Regular,
                 /** 执行方法 */
                 fnc: 'LoliconAPI',
                 /** 禁用日志 */
@@ -115,10 +115,7 @@ export class LoliconAPI extends plugin {
         // 检测是否处于CD中
         const CDTIME = await redis.get(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`)
 
-        if (CDTIME && !e.isMaster) {
-            await e.reply('「冷却中」先生，冲太快会炸膛！', true, { recallMsg: 15 })
-            return await this.clearCD()
-        }
+        if (CDTIME && !e.isMaster) return e.reply('「冷却中」先生，冲太快会炸膛！', true, { recallMsg: 15 })
 
         await e.reply(`[${Plugin_name}] 少女祈祷中…`, false, { recallMsg: 15 })
 
@@ -159,7 +156,7 @@ export class LoliconAPI extends plugin {
             const JSON = await LoliconAPI.json()
 
             if (Array.isArray(JSON.data) && JSON.data.length === 0) {
-                await e.reply(`[${Plugin_name}] 未获取到相关数据！`)
+                await e.reply(`[${Plugin_name}] 未获取到相关数据！`, false, { recallMsg: 15 })
                 return await this.clearCD()
             }
 
