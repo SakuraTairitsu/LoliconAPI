@@ -1,294 +1,320 @@
-import plugin from "../../lib/plugins/plugin.js"
-import fetch from "node-fetch"
-import moment from "moment"
-import lodash from "lodash"
-import sharp from 'sharp' //依赖安装命令pnpm add sharp@latest -w
+import plugin from '../../lib/plugins/plugin.js'
+import common from '../../lib/common/common.js'
+import HttpsProxyAgent from 'https-proxy-agent'
+import fetch from 'node-fetch'
+import { segment } from 'icqq'
+import lodash from 'lodash'
+import moment from 'moment'
+import sharp from 'sharp'
 
+/*
+--------------------[依赖安装命令pnpm add sharp@latest -w]--------------------
+***** Author(CN)：枫[MAPLE]
+***** Contact(QQ)：2523148477
+***** 任何有关插件本体的意外报错都可以提起issues，或通过联系方式（QQ直接问我
+***** 个人觉得代码考虑比较全面，但防呆不防傻——请不要搞一些脑血栓操作恶意引起错误
+***** 取图速度足够优化非代码问题，若你有稳定反代+魔法那么取单张图仅需七八秒（私聊
+***** 取图失败非代码问题因API提供的图链失效导致，请不要提这个问题（虽然我能优化逻辑
+-----------------------------------------------------------------------------
+*/
+
+/** 配置（硬编码 */
 const config = {
     /** 设置CD，主人不受限制，单位为秒 */
-    CD: 15,
+    CD: 30,
 
-    /** 设置图片地址所使用的在线反代服务 */
-    proxy: "i.pixiv.re",
+    /** 设置图片地址所使用的在线反代服务，默认i.pixiv.re（出图真的慢，建议自行搭建反代使用魔法 */
+    proxy: 'i.pixiv.re',
+
+    /** 设置代理地址（没有可不填，但填上面的反代如果大陆访问不了就得填嗷 */
+    proxyAddress: '',
 
     /** 返回图片的规格 */
-    size: "original", // 可写值：原图[original] 缩略图[regular] ；还有三个我想没人用：[small | thumb | mini]（自己试
+    size: 'original', // 可写值：原图[original] 缩略图[regular] ；还有三个我想没人用：[small | thumb | mini]（自己试
 
     /** 是否排除 AI 作品 */
     excludeAI: true,
 
-    // 0为非 R18，1为 R18，2为混合
+    // 0[R18-]，1[R18+]，2[R18±]
     r18_Master: 1, // 主人特供
     r18: 0 // 群员？爬！
 }
 
 
-/** 当tag为空时使用预设，在下面添加即可 */
+/** 当tag为空时使用预设，在下面添加即可（三维数组：tag最多三个 */
 const random_pic = [
-    "萝莉|女孩子",
-    "猫耳|白丝"
+    [
+        ['萝莉'], ['女孩子']
+    ],
+    [
+        ['萝莉'], ['猫耳'], ['白丝']
+    ]
 ]
 
-const NumReg = "[零一壹二两三四五六七八九十百千万亿\\d]+"
-const Lolicon_KEY = new RegExp(`^来\\s?(${NumReg})?(张|份|点)(.*)(涩|色|瑟)(图|圖)`)
+const Plugin_name = 'LoliconAPI'
+const NumReg = '[零一壹二贰两三叁四肆五伍六陆七柒八捌九玖十拾百佰千仟万亿\\d]+'
+const Lolicon_KEY = new RegExp(`^来\\s?(${NumReg})?[张份点](.*)[涩色瑟][图圖]`)
 
 export class LoliconAPI extends plugin {
     constructor() {
         super({
             /** 功能名称 */
-            name: "LoliconAPI",
+            name: 'LoliconAPI',
             /** 功能描述 */
-            dsc: "https://api.lolicon.app",
+            dsc: 'https://api.lolicon.app',
             /** https://oicqjs.github.io/oicq/#events */
-            event: "message",
+            event: 'message',
             /** 优先级，数字越小等级越高 */
             priority: 0,
             rule: [{
                 /** 命令正则匹配 */
                 reg: Lolicon_KEY,
                 /** 执行方法 */
-                fnc: "setu",
+                fnc: 'LoliconAPI',
                 /** 禁用日志 */
                 log: false
             }]
         })
     }
 
-    async setu(e) {
+    /** 清除CD */
+    async clearCD() {
+        return await redis.del(`${Plugin_name}_${this.e.group_id}_${this.e.user_id}_CD`)
+    }
+
+    /**
+     * 来份涩图
+     * @param {Object} e - 消息事件
+     * @param {Number} num - 涩图点数
+     * @param {String} tagValue - 图片tags
+     * @param {Number} successCount - 成功计数
+     * @param {Number} failureCount - 失败计数
+     * @returns 
+     */
+    async LoliconAPI(
+        e,
+        num = 0,
+        tagValue = '',
+        successCount = 0,
+        failureCount = 0
+    ) {
+        /**
+         * 初始化代理（兼容7.0.x和5.0.x
+         * @param {String} proxyAddress - 代理地址
+         * @returns {Promise<HttpsProxyAgent>}
+         */
+        function proxyAgent(proxyAddress) {
+            try {
+                const HttpsProxyAgentLatest = HttpsProxyAgent.HttpsProxyAgent
+                return new HttpsProxyAgentLatest(proxyAddress)
+            } catch {
+                return new HttpsProxyAgent(proxyAddress)
+            }
+        }
+
         // 检测是否处于CD中
-        const CDTIME = await redis.get(`LoliconAPI_${e.group_id}_CD`)
-        if (CDTIME && !e.isMaster) return e.reply("「冷却中」先生，冲太快会炸膛！")
-        const GetTime = moment(new Date()).format("YYYY-MM-DD HH:mm:ss")
-        await redis.set(`LoliconAPI_${e.group_id}_CD`, GetTime, { EX: config.CD })
+        const CDTIME = await redis.get(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`)
 
-        const tag = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?(?:张|份|点)\|(?:涩|色|瑟)(?:图|圖)`, "g"), "")
-        var num = e.msg.match(new RegExp(NumReg))
+        if (CDTIME && !e.isMaster) {
+            await e.reply('「冷却中」先生，冲太快会炸膛！', true, { recallMsg: 15 })
+            return await this.clearCD()
+        }
 
-        if (num) { num = convertChineseNumberToArabic(num[0]) } else num = 1
+        await e.reply(`[${Plugin_name}] 少女祈祷中…`, false, { recallMsg: 15 })
+
+        await redis.set(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`, moment(new Date()).format('YYYY-MM-DD HH:mm:ss'), { EX: config.CD })
+
+        const tags = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?[张份点]\|[涩色瑟][图圖]`, 'g'), '').split(/[\s|,.\u3002\uff0c、]+/)
+
+        if (tags.length > 3) {
+            await e.reply(`标签数量过多！`, true, { recallMsg: 15 })
+            return await this.clearCD()
+        }
+
+        tagValue = tags.map(tags => `&tag=${tags}`).join('')
+
+        if (!tagValue || tagValue === '&tag=') tagValue = lodash.sample(random_pic).map(tags => `&tag=${tags.join('|')}`).join('')
+
+        num = e.msg.match(new RegExp(NumReg))
+        num = num ? convertChineseNumberToArabic(num[0]) : 1
 
         // 限制num最大值为20
         if (num > 20) {
-            return e.reply("[WARN] 先生，冲太多会炸膛！")
+            await e.reply('先生，冲太多会炸膛！', false, { at: true, recallMsg: 15 })
+            return await this.clearCD()
         } else if (num === 0) {
-            return e.reply("你TM故意找茬是不是？")
-        } else if (num === "" || num === null) {
+            await e.reply('你TM故意找茬是不是？', false, { at: true, recallMsg: 15 })
+            return await this.clearCD()
+        } else if (num === '' || num === null) {
             num = 1
         }
 
-        await e.reply("[LoliconAPI] 少女祈祷中…", false, { recallMsg: 30 })
+        const r18Value = e.isMaster ? config.r18_Master : config.r18
 
-        // 三元表达式
-        const r18Value = e.isGroup ? (e.isMaster ? config.r18_Master : config.r18) : (e.isMaster ? config.r18_Master : 2)
-        const tagValue = tag || lodash.sample(random_pic)
-        const url = `https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}&tag=${tagValue}&excludeAI=${config.excludeAI}&num=${num}`
+        const url = `https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}${tagValue}&excludeAI=${config.excludeAI}&num=${num}`
 
         try {
-            const response = await fetch(url)
+            const proxy = config.proxyAddress === '' ? null : await proxyAgent(config.proxyAddress)
+            const LoliconAPI = await fetch(url, { agent: proxy })
+            const JSON = await LoliconAPI.json()
 
-            const result = await response.json()
-            if (Array.isArray(result.data) && result.data.length === 0) return e.reply("[LoliconAPI] 未获取到相关数据！")
+            if (Array.isArray(JSON.data) && JSON.data.length === 0) {
+                await e.reply(`[${Plugin_name}] 未获取到相关数据！`)
+                return await this.clearCD()
+            }
 
-            let imageUrl
-            let msgs = []
-            let successCount = 0
-            let failureCount = 0
+            const msgs = []
 
-            for (const item of result.data) {
-                try {
-                    const isValid = await checkImageURL(item.urls.original)
-                    if (isValid) {
-                        successCount++
+            for (const item of JSON.data) {
+                const response = await fetch(item.urls.original, { agent: proxy })
+                if (response.ok) {
+                    const imageArrayBuffer = await response.arrayBuffer()
+                    const imageData = e.isGroup
+                        ? await processImage(imageArrayBuffer)
+                        : Buffer.from(imageArrayBuffer)
 
-                        if (!e.isGroup) {
-                            imageUrl = item.urls.original
-                        } else {
-                            // 获取图片数据
-                            const response = await fetch(item.urls.original)
-                            const imageData = await response.arrayBuffer()
-                            // 处理图片数据
-                            logger.info('正在处理图片…')
-                            imageUrl = await processImage(imageData)
-                        }
-                        const msg = [
-                            '标题：' + item.title + '\n',
-                            '画师：' + item.author + '\n',
-                            'Pid：' + item.pid + '\n',
-                            'R18：' + item.r18 + '\n',
-                            'Tags：' + item.tags.join('，') + '\n',
-                            segment.image(imageUrl)
-                        ]
-                        msgs.push(msg)
-                    } else {
-                        failureCount++
-                        // 如果图片 URL 无效，可以在这里添加操作（懒得写了
-                    }
-                } catch (error) {
-                    logger.warn(error)
+                    msgs.push([
+                        '标题：' + item.title + '\n',
+                        '画师：' + item.author + '\n',
+                        'Pid：' + item.pid + '\n',
+                        'R18：' + item.r18 + '\n',
+                        'Tags：' + item.tags.join('，') + '\n',
+                        segment.image(imageData)
+                    ])
+                    successCount++
+                } else {
+                    failureCount++
                 }
             }
 
             // 图片仅有一张且失败的处理
-            if (successCount === 0 && failureCount === 1) return e.reply('[LoliconAPI] 获取图片失败！', false, { recallMsg: 120 })
+            if (successCount === 0 && failureCount === 1) return e.reply(`[${Plugin_name}] 获取图片失败！`, false, { recallMsg: 15 })
 
             // 为获取图片不全的数组添加提示信息，但所有图片都获取成功时，不显示成功和失败数量（不想尾部添加提示信息注释掉本行代码即可
-            if (failureCount > 0) msgs.push(`[LoliconAPI] 获取图片成功 ${successCount} 张，失败 ${failureCount} 张~`)
+            if (failureCount > 0) msgs.push(`[${Plugin_name}] 获取图片成功 ${successCount} 张，失败 ${failureCount} 张~`)
 
             // 制作并发送转发消息
-            return e.reply(await makeForwardMsg(e, msgs, '[-----LoliconAPI-----]'))
-        } catch (error) {
-            // 错误信息
-            logger.warn(error)
-            return e.reply("[LoliconAPI] 请检查网络环境！")
+            const msg = await e.reply(await common.makeForwardMsg(e, msgs, `[-----${Plugin_name}-----]`))
+            if (!msg) {
+                await e.reply('消息发送失败，可能被风控', false, { recallMsg: 15 })
+                return await this.clearCD()
+            } else {
+                return msg
+            }
+        } catch (err) {
+            // 错误处理
+            logger.warn(err)
+            await e.reply(`[${Plugin_name}] 请检查网络环境！`, false, { recallMsg: 15 })
+            return await this.clearCD()
         }
-    }
-}
-
-async function checkImageURL(url) {
-    try {
-        const response = await fetch(url, { method: "HEAD" })
-        return response.ok
-    } catch (error) {
-        logger.warn(error)
-        return false
-    }
-}
-
-async function makeForwardMsg(e, msg = [], dec = '') {
-    if (!Array.isArray(msg)) msg = [msg]
-
-    const userInfo = {
-        user_id: e.user_id,
-        nickname: e.nickname
-    }
-
-    let forwardMsg = []
-    for (const message of msg) {
-        if (!message) continue
-        forwardMsg.push({
-            ...userInfo,
-            message: message
-        })
-    }
-
-    /** 制作转发内容 */
-    if (e?.group?.makeForwardMsg) {
-        forwardMsg = await e.group.makeForwardMsg(forwardMsg)
-    } else if (e?.friend?.makeForwardMsg) {
-        forwardMsg = await e.friend.makeForwardMsg(forwardMsg)
-    } else {
-        return msg.join('\n')
-    }
-
-    if (dec) {
-        /** 处理描述 */
-        if (typeof (forwardMsg.data) === 'object') {
-            let detail = forwardMsg.data?.meta?.detail
-            if (detail) detail.news = [{ text: dec }]
-        } else {
-            forwardMsg.data = forwardMsg.data
-                .replace(/\n/g, '')
-                .replace(/<title color="#777777" size="26">(.+?)<\/title>/g, '___')
-                .replace(/___+/, `<title color="#777777" size="26">${dec}</title>`)
-        }
-    }
-    return forwardMsg
-}
-
-async function processImage(imageData) {
-    try {
-        // 获取图片元数据
-        const metadata = await sharp(imageData).metadata()
-
-        // 定义一个数组，包含所有可能的修改选项
-        const options = ['brightness', 'contrast', 'saturation', 'hue', 'width', 'height']
-
-        // 随机选择一个选项
-        const option = options[Math.floor(Math.random() * options.length)]
-
-        // 根据选择的选项进行修改
-        switch (option) {
-            case 'brightness':
-                // 修改亮度
-                imageData = await sharp(imageData).modulate({ brightness: 1 + Math.random() * 0.02 }).toBuffer()
-                break
-            case 'contrast':
-                // 修改对比度
-                imageData = await sharp(imageData).modulate({ contrast: 1 + Math.random() * 0.02 }).toBuffer()
-                break
-            case 'saturation':
-                // 修改饱和度
-                imageData = await sharp(imageData).modulate({ saturation: 1 + Math.random() * 0.02 }).toBuffer()
-                break
-            case 'hue':
-                // 修改色调
-                imageData = await sharp(imageData).modulate({ hue: Math.floor(Math.random() * 3.6) }).toBuffer()
-                break
-            case 'width':
-                // 修改宽度
-                const newWidth = metadata.width - 1 + Math.floor(Math.random() * 2)
-                imageData = await sharp(imageData).resize(newWidth, null, { withoutEnlargement: true }).toBuffer()
-                break
-            case 'height':
-                // 修改高度
-                const newHeight = metadata.height - 1 + Math.floor(Math.random() * 2)
-                imageData = await sharp(imageData).resize(null, newHeight, { withoutEnlargement: true }).toBuffer()
-                break
-        }
-        return imageData
-    } catch (err) {
-        logger.warn(err)
-        return imageData
     }
 }
 
 /**
- * @description: 使用JS将数字从汉字形式转化为阿拉伯形式
- * @param {string} convert
- * @return {number}
+ * 图片处理
+ * @param {ArrayBuffer} imageData - 图片元数据
+ * @returns {Promise<Buffer>} - 处理后的图片数据（转Buffer
+ * @throws {Error} - 返回图片原数据（转Buffer
  */
-function convertChineseNumberToArabic(input) {
+async function processImage(imageData) {
+    try {
+        const metadata = await sharp(imageData).metadata()
+        const options = ['brightness', 'contrast', 'saturation', 'hue', 'width', 'height']
+        const option = options[Math.floor(Math.random() * options.length)]
+
+        switch (option) {
+            case 'brightness':
+                imageData = await sharp(imageData).modulate({ brightness: 1 + Math.random() * 0.02 }).toBuffer()
+                break
+
+            case 'contrast':
+                imageData = await sharp(imageData).modulate({ contrast: 1 + Math.random() * 0.02 }).toBuffer()
+                break
+
+            case 'saturation':
+                imageData = await sharp(imageData).modulate({ saturation: 1 + Math.random() * 0.02 }).toBuffer()
+                break
+
+            case 'hue':
+                imageData = await sharp(imageData).modulate({ hue: Math.floor(Math.random() * 3.6) }).toBuffer()
+                break
+
+            case 'width':
+                imageData = await sharp(imageData).resize(metadata.width - 1 + Math.floor(Math.random() * 2), null, { withoutEnlargement: true }).toBuffer()
+                break
+
+            case 'height':
+                imageData = await sharp(imageData).resize(null, metadata.height - 1 + Math.floor(Math.random() * 2), { withoutEnlargement: true }).toBuffer()
+                break
+        }
+
+        return Buffer.from(imageData)
+    } catch (err) {
+        logger.warn(`处理图片发生错误！\n${err}\n请截图反馈开发者~`)
+        return Buffer.from(imageData)
+    }
+}
+
+/**
+ * 将中文数字转换为阿拉伯数字
+ * @param {string} input - 输入的中文数字字符串
+ * @returns {number} - 转换后的阿拉伯数字
+ */
+function convertChineseNumberToArabic(
+    input,
+    ten = '',
+    parts = [],
+    result = '',
+    temp = false,
+    splitString = ''
+) {
     if (!input && input != 0) return input
-    // 如果是纯数字直接返回
+
     if (/^\d+$/.test(input)) return Number(input)
-    // 字典
-    let dictionary = new Map()
-    dictionary.set('一', 1)
-    dictionary.set('壹', 1) // 特殊
-    dictionary.set('二', 2)
-    dictionary.set('两', 2) // 特殊
-    dictionary.set('三', 3)
-    dictionary.set('四', 4)
-    dictionary.set('五', 5)
-    dictionary.set('六', 6)
-    dictionary.set('七', 7)
-    dictionary.set('八', 8)
-    dictionary.set('九', 9)
-    // 按照亿、万为分割将字符串划分为三部分
-    let splitString = ''
+
+    const dictionary = new Map([
+        ['一', 1],
+        ['二', 2],
+        ['三', 3],
+        ['四', 4],
+        ['五', 5],
+        ['六', 6],
+        ['七', 7],
+        ['八', 8],
+        ['九', 9],
+        ['壹', 1],
+        ['贰', 2],
+        ['叁', 3],
+        ['肆', 4],
+        ['伍', 5],
+        ['陆', 6],
+        ['柒', 7],
+        ['捌', 8],
+        ['玖', 9],
+        ['两', 2]
+    ])
+
     splitString = input.split('亿')
-    let billionAndRest = splitString.length > 1 ? splitString : ['', input]
-    let rest = billionAndRest[1]
-    let billion = billionAndRest[0]
+    const billionAndRest = splitString.length > 1 ? splitString : ['', input]
+    const rest = billionAndRest[1]
+    const billion = billionAndRest[0]
     splitString = rest.split('万')
-    let tenThousandAndRemainder = splitString.length > 1 ? splitString : ['', rest]
-    let tenThousand = tenThousandAndRemainder[0]
-    let remainder = tenThousandAndRemainder[1]
-    let parts = [billion, tenThousand, remainder]
+    const tenThousandAndRemainder = splitString.length > 1 ? splitString : ['', rest]
+    const tenThousand = tenThousandAndRemainder[0]
+    const remainder = tenThousandAndRemainder[1]
+    parts = [billion, tenThousand, remainder]
 
     parts = parts.map(item => {
-        let result = ''
         result = item.replace('零', '')
-        let reg = new RegExp(`[${Array.from(dictionary.keys()).join('')}]`, 'g')
+        const reg = new RegExp(`[${Array.from(dictionary.keys()).join('')}]`, 'g')
         result = result.replace(reg, substring => {
             return dictionary.get(substring)
         })
-        let temp
-        temp = /\d(?=千)/.exec(result)
-        let thousand = temp ? temp[0] : '0'
-        temp = /\d(?=百)/.exec(result)
-        let hundred = temp ? temp[0] : '0'
-        temp = /\d?(?=十)/.exec(result)
-        let ten
+        temp = /\d(?=[千仟])/.exec(result)
+        const thousand = temp ? temp[0] : '0'
+        temp = /\d(?=[百佰])/.exec(result)
+        const hundred = temp ? temp[0] : '0'
+        temp = /\d?(?=[十拾])/.exec(result)
         if (temp === null) {
             ten = '0'
         } else if (temp[0] === '') {
@@ -297,9 +323,8 @@ function convertChineseNumberToArabic(input) {
             ten = temp[0]
         }
         temp = /\d$/.exec(result)
-        let num = temp ? temp[0] : '0'
+        const num = temp ? temp[0] : '0'
         return thousand + hundred + ten + num
     })
-    // 借助parseInt自动去零
     return parseInt(parts.join(''))
 }
