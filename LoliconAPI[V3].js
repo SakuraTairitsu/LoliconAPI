@@ -10,8 +10,7 @@ import sharp from 'sharp'
 /*
 --------------------[依赖安装命令pnpm add sharp@latest -w]--------------------
 ***** Author(CN)：枫[MAPLE]
-***** Contact(QQ)：2523148477
-***** 任何有关插件本体的意外报错都可以提issues，或通过联系方式（QQ直接问我
+***** 任何有关插件本体的意外报错都可以提issues
 ***** 个人觉得代码考虑比较全面，但防呆不防傻——请不要搞一些脑血栓操作恶意引起错误
 ***** 取图速度足够优化非代码问题，若你有稳定反代+魔法那么取单张图仅需七八秒（私聊
 ***** 取图失败非代码问题因API提供图链失效导致，请不要提这个问题（虽然我能优化逻辑
@@ -82,6 +81,11 @@ export class LoliconAPI extends plugin {
         return await redis.del(`${Plugin_name}_${this.e.group_id}_${this.e.user_id}_CD`)
     }
 
+    /** 撤回消息 */
+    async recallMessage(e, message) {
+        return e.isGroup ? e.group.recallMsg(message.message_id) : e.friend.recallMsg(message.message_id)
+    }
+
     /**
      * 来份涩图
      * @param {Object} e - 消息事件
@@ -117,7 +121,7 @@ export class LoliconAPI extends plugin {
 
         if (CDTIME && !e.isMaster) return e.reply('「冷却中」先生，冲太快会炸膛！', true, { recallMsg: 15 })
 
-        await e.reply(`[${Plugin_name}] 少女祈祷中…`, false, { recallMsg: 15 })
+        const startMessage = await e.reply(`[${Plugin_name}] 少女祈祷中…`)
 
         await redis.set(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`, moment(new Date()).format('YYYY-MM-DD HH:mm:ss'), { EX: config.CD })
 
@@ -148,14 +152,13 @@ export class LoliconAPI extends plugin {
 
         const r18Value = e.isMaster ? config.r18_Master : config.r18
 
-        const url = `https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}${tagValue}&excludeAI=${config.excludeAI}&num=${num}`
-
         try {
             const proxy = config.proxyAddress === '' ? null : await proxyAgent(config.proxyAddress)
-            const LoliconAPI = await fetch(url, { agent: proxy })
+            const LoliconAPI = await fetch(`https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}${tagValue}&excludeAI=${config.excludeAI}&num=${num}`, { agent: proxy })
             const JSON = await LoliconAPI.json()
 
             if (Array.isArray(JSON.data) && JSON.data.length === 0) {
+                this.recallMessage(e, startMessage)
                 await e.reply(`[${Plugin_name}] 未获取到相关数据！`, false, { recallMsg: 15 })
                 return await this.clearCD()
             }
@@ -193,14 +196,17 @@ export class LoliconAPI extends plugin {
             // 制作并发送转发消息
             const msg = await e.reply(await common.makeForwardMsg(e, msgs, `[-----${Plugin_name}-----]`))
             if (!msg) {
+                this.recallMessage(e, startMessage)
                 await e.reply('消息发送失败，可能被风控', false, { recallMsg: 15 })
                 return await this.clearCD()
             } else {
+                this.recallMessage(e, startMessage)
                 return msg
             }
         } catch (err) {
             // 错误处理
             logger.warn(err)
+            this.recallMessage(e, startMessage)
             await e.reply(`[${Plugin_name}] 请检查网络环境！`, false, { recallMsg: 15 })
             return await this.clearCD()
         }
