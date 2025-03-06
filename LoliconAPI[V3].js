@@ -2,57 +2,38 @@ import plugin from '../../lib/plugins/plugin.js'
 import common from '../../lib/common/common.js'
 import HttpsProxyAgent from 'https-proxy-agent'
 import fetch from 'node-fetch'
-import { segment } from 'icqq'
-import lodash from 'lodash'
-import moment from 'moment'
 import sharp from 'sharp'
+import _ from 'lodash'
 
-/*
---------------------[依赖安装命令pnpm add sharp@latest -w]--------------------
-***** Author(CN)：枫[MAPLE]
-***** 任何有关插件本体的意外报错都可以提issues
-***** 个人觉得代码考虑比较全面，但防呆不防傻——请不要搞一些脑血栓操作恶意引起错误
-***** 取图速度足够优化非代码问题，若你有稳定反代+魔法那么取单张图仅需七八秒（私聊
-***** 取图失败非代码问题因API提供图链失效导致，请不要提这个问题（虽然我能优化逻辑
------------------------------------------------------------------------------
-*/
-
-/** 配置（硬编码 */
+/** 配置 */
 const config = {
-    /** 设置CD，主人不受限制，单位为秒 */
-    CD: 30,
+    /** 图片地址所使用的在线反代服务 */
+    proxy: '',
 
-    /** 设置图片地址所使用的在线反代服务，默认i.pixiv.re（出图真的慢，建议自行搭建反代使用魔法 */
-    proxy: 'i.pixiv.re',
-
-    /** 设置代理地址（没有可不填，默认为空字符串，但填上面的反代如果大陆访问不了就得填嗷 */
+    /** 代理地址 */
     proxyAddress: '',
 
+    /** 0[R18-] 1[R18+] 2[R18±] */
+    r18: 0,
+
     /** 返回图片的规格 */
-    size: 'original', // 可写值：原图[original] 缩略图[regular] ；还有三个我想没人用：[small | thumb | mini]（自己试
+    size: 'original', // 可写值：原图[original] 缩略图[regular] ...[small|thumb|mini]
 
     /** 是否排除 AI 作品 */
     excludeAI: true,
 
-    // 0[R18-]，1[R18+]，2[R18±]
-    r18_Master: 1, // 主人特供
-    r18: 0 // 群员？爬！
+    /** 风控发不出来把这个设为true */
+    process: false
 }
 
-
-/** 当tag为空时使用预设，在下面添加即可（三维数组：tag最多三个 */
+/** 预设，在下面添加即可（tag最多三个 */
 const random_pic = [
-    [
-        ['萝莉'], ['女孩子']
-    ],
-    [
-        ['萝莉'], ['猫耳'], ['白丝']
-    ]
+    ['女孩子'],
+    ['猫耳', '白裤袜'] // ['','','']
 ]
 
-const Plugin_name = 'LoliconAPI'
 const NumReg = '[零一壹二贰两三叁四肆五伍六陆七柒八捌九玖十拾百佰千仟万亿\\d]+'
-const Regular = new RegExp(`^来\\s?(${NumReg})?[张份点](.*)[涩色瑟][图圖]`)
+const reg = new RegExp(`^来\\s?(${NumReg})?[张份点](.*)[涩色瑟][图圖]`)
 
 export class LoliconAPI extends plugin {
     constructor() {
@@ -67,194 +48,184 @@ export class LoliconAPI extends plugin {
             priority: 0,
             rule: [{
                 /** 命令正则匹配 */
-                reg: Regular,
+                reg,
                 /** 执行方法 */
-                fnc: 'LoliconAPI',
-                /** 禁用日志 */
-                log: false
+                fnc: 'main'
             }]
         })
     }
 
-    /** 清除CD */
-    async clearCD() {
-        return await redis.del(`${Plugin_name}_${this.e.group_id}_${this.e.user_id}_CD`)
-    }
-
-    /** 撤回消息 */
-    async recallMessage(e, message) {
+    /**
+    * 撤回指定消息
+    * @param e - 消息事件
+    * @param message - 消息对象
+    */
+    recallMessage(e, message) {
         return e.isGroup ? e.group.recallMsg(message.message_id) : e.friend.recallMsg(message.message_id)
     }
 
     /**
      * 来份涩图
-     * @param {Object} e - 消息事件
-     * @param {Number} num - 涩图点数
-     * @param {String} tagValue - 图片tags
+     * @param e - 消息事件
      * @param {Number} successCount - 成功计数
      * @param {Number} failureCount - 失败计数
-     * @returns 
      */
-    async LoliconAPI(
-        e,
-        num = 0,
-        tagValue = '',
-        successCount = 0,
-        failureCount = 0
-    ) {
-        /**
-         * 初始化代理（兼容7.0.x和5.0.x
-         * @param {String} proxyAddress - 代理地址
-         * @returns {Promise<HttpsProxyAgent>}
-         */
-        function proxyAgent(proxyAddress) {
-            try {
-                const HttpsProxyAgentLatest = HttpsProxyAgent.HttpsProxyAgent
-                return new HttpsProxyAgentLatest(proxyAddress)
-            } catch {
-                return new HttpsProxyAgent(proxyAddress)
-            }
+    async main(e, successCount = 0, failureCount = 0) {
+        const startMessage = await e.reply(`[${this.name}] 少女祈祷中…`)
+
+        const tags = e.msg.match(reg)[2].trim()
+
+        const tag = tags ? tags.split(/[\s|,.\u3002\uff0c、]+/).map(tag => [tag]) : random_pic
+
+        if (tag.length > 3) return e.reply('标签数量过多！', true)
+
+        const num = e.msg.match(new RegExp(NumReg))
+        const formatNum = num ? convertChineseNumberToArabic(num[0]) : 1
+
+        if (formatNum > 20) {
+            this.recallMessage(e, startMessage)
+            return e.reply('先生，冲太多会炸膛！')
+        } else if (formatNum === 0) {
+            this.recallMessage(e, startMessage)
+            return e.reply('你TM故意找茬是不是？')
         }
 
-        // 检测是否处于CD中
-        const CDTIME = await redis.get(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`)
-
-        if (CDTIME && !e.isMaster) return e.reply('「冷却中」先生，冲太快会炸膛！', true, { recallMsg: 15 })
-
-        const startMessage = await e.reply(`[${Plugin_name}] 少女祈祷中…`)
-
-        await redis.set(`${Plugin_name}_${e.group_id}_${e.user_id}_CD`, moment(new Date()).format('YYYY-MM-DD HH:mm:ss'), { EX: config.CD })
-
-        const tags = e.msg.replace(new RegExp(`^来\\s?(${NumReg})?[张份点]\|[涩色瑟][图圖]`, 'g'), '').split(/[\s|,.\u3002\uff0c、]+/)
-
-        if (tags.length > 3) {
-            await e.reply(`标签数量过多！`, true, { recallMsg: 15 })
-            return await this.clearCD()
-        }
-
-        tagValue = tags.map(tags => `&tag=${tags}`).join('')
-
-        if (!tagValue || tagValue === '&tag=') tagValue = lodash.sample(random_pic).map(tags => `&tag=${tags.join('|')}`).join('')
-
-        num = e.msg.match(new RegExp(NumReg))
-        num = num ? convertChineseNumberToArabic(num[0]) : 1
-
-        // 限制num最大值为20
-        if (num > 20) {
-            await e.reply('先生，冲太多会炸膛！', false, { at: true, recallMsg: 15 })
-            return await this.clearCD()
-        } else if (num === 0) {
-            await e.reply('你TM故意找茬是不是？', false, { at: true, recallMsg: 15 })
-            return await this.clearCD()
-        } else if (num === '' || num === null) {
-            num = 1
-        }
-
-        const r18Value = e.isMaster ? config.r18_Master : config.r18
+        const { proxy, proxyAddress, r18, size, excludeAI } = config
 
         try {
-            const proxy = config.proxyAddress === '' ? null : await proxyAgent(config.proxyAddress)
-            const LoliconAPI = await fetch(`https://api.lolicon.app/setu/v2?proxy=${config.proxy}&size=${config.size}&r18=${r18Value}${tagValue}&excludeAI=${config.excludeAI}&num=${num}`, { agent: proxy })
-            const JSON = await LoliconAPI.json()
+            const result = await fetch('https://api.lolicon.app/setu/v2', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    tag,
+                    num: formatNum,
+                    proxy: proxy || (proxyAddress ? 'i.pximg.net' : 'i.pixiv.re'),
+                    r18,
+                    size,
+                    excludeAI
+                })
+            }).then(res => res.json()).catch(() => { return e.reply('出了点小问题，待会儿再试试吧~') })
 
-            if (Array.isArray(JSON.data) && JSON.data.length === 0) {
+            if (!Array.isArray(result.data) || result.data.length === 0) {
                 this.recallMessage(e, startMessage)
-                await e.reply(`[${Plugin_name}] 未获取到相关数据！`, false, { recallMsg: 15 })
-                return await this.clearCD()
+                return e.reply(`[${this.name}] 未获取到相关数据！`)
             }
+
+            const results = await Promise.all(result.data.map(async item => {
+                try {
+                    const { title, author, pid, r18, tags, urls } = item
+                    const start = Date.now()
+                    const response = await fetch(urls.original, {
+                        headers: config.proxy
+                            ? undefined
+                            : config.proxyAddress
+                                ? { 'Referer': 'https://www.pixiv.net/' }
+                                : undefined,
+                        agent: config.proxyAddress ? await proxyAgent(config.proxyAddress) : undefined
+                    })
+
+                    if (!response.ok) return { success: false }
+
+                    const buffer = await response.arrayBuffer().then(Buffer.from).catch(() => undefined)
+
+                    if (!buffer) return { success: false }
+
+                    logger.debug(`[loliconAPI][${urls.original}] ${logger.magenta((buffer.length / 1024).toFixed(2) + 'KB')} ${logger.green(Date.now() - start + 'ms')}`)
+
+                    const image = e.isGroup && config.process ? await processImage(buffer) : buffer
+
+                    return {
+                        success: true,
+                        data: [
+                            '标题：' + title + '\n',
+                            '画师：' + author + '\n',
+                            'Pid：' + pid + '\n',
+                            'R18：' + r18 + '\n',
+                            'Tags：' + tags.join('，') + '\n',
+                            segment.image(image)
+                        ]
+                    }
+                } catch (err) {
+                    logger.error(err)
+                    return { success: false }
+                }
+            }))
 
             const msgs = []
 
-            for (const item of JSON.data) {
-                const response = await fetch(item.urls.original, { agent: proxy })
-                if (response.ok) {
-                    const imageArrayBuffer = await response.arrayBuffer()
-                    const imageData = e.isGroup
-                        ? await processImage(imageArrayBuffer)
-                        : Buffer.from(imageArrayBuffer)
-
-                    msgs.push([
-                        '标题：' + item.title + '\n',
-                        '画师：' + item.author + '\n',
-                        'Pid：' + item.pid + '\n',
-                        'R18：' + item.r18 + '\n',
-                        'Tags：' + item.tags.join('，') + '\n',
-                        segment.image(imageData)
-                    ])
+            results.forEach(result => {
+                if (result.success) {
+                    msgs.push(result.data)
                     successCount++
                 } else {
                     failureCount++
                 }
+            })
+
+            if (successCount === 0) {
+                this.recallMessage(e, startMessage)
+                return e.reply(`[${this.name}] 获取图片失败！`, false)
             }
 
-            // 图片仅有一张且失败的处理
-            if (successCount === 0 && failureCount === 1) return e.reply(`[${Plugin_name}] 获取图片失败！`, false, { recallMsg: 15 })
+            if (failureCount > 0) msgs.push(`获取图片成功 ${successCount} 张，失败 ${failureCount} 张`)
 
-            // 为获取图片不全的数组添加提示信息，但所有图片都获取成功时，不显示成功和失败数量（不想尾部添加提示信息注释掉本行代码即可
-            if (failureCount > 0) msgs.push(`[${Plugin_name}] 获取图片成功 ${successCount} 张，失败 ${failureCount} 张~`)
+            const msg = await e.reply(await common.makeForwardMsg(e, msgs, `[-----${this.name}-----]`))
 
-            // 制作并发送转发消息
-            const msg = await e.reply(await common.makeForwardMsg(e, msgs, `[-----${Plugin_name}-----]`))
-            if (!msg) {
-                this.recallMessage(e, startMessage)
-                await e.reply('消息发送失败，可能被风控', false, { recallMsg: 15 })
-                return await this.clearCD()
-            } else {
-                this.recallMessage(e, startMessage)
-                return msg
-            }
+            return msg ? msg : e.reply('消息发送失败，可能被风控')
         } catch (err) {
-            // 错误处理
-            logger.warn(err)
-            this.recallMessage(e, startMessage)
-            await e.reply(`[${Plugin_name}] 请检查网络环境！`, false, { recallMsg: 15 })
-            return await this.clearCD()
+            logger.error(err)
+            return false
         }
     }
 }
 
 /**
  * 图片处理
- * @param {ArrayBuffer} imageData - 图片元数据
- * @returns {Promise<Buffer>} - 处理后的图片数据（转Buffer
- * @throws {Error} - 返回图片原数据（转Buffer
+ * @param {buffer} imageBuffer - 图片buffer
  */
-async function processImage(imageData) {
+async function processImage(imageBuffer) {
+    logger.debug('执行图片处理')
+    const start = Date.now()
     try {
-        const metadata = await sharp(imageData).metadata()
-        const options = ['brightness', 'contrast', 'saturation', 'hue', 'width', 'height']
-        const option = options[Math.floor(Math.random() * options.length)]
+        const metadata = sharp(imageBuffer)
+        const option = _.sample(['brightness', 'contrast', 'saturation'])
 
         switch (option) {
             case 'brightness':
-                imageData = await sharp(imageData).modulate({ brightness: 1 + Math.random() * 0.02 }).toBuffer()
+                logger.debug('brightness')
+                metadata.modulate({ brightness: 1.01 })
                 break
-
             case 'contrast':
-                imageData = await sharp(imageData).modulate({ contrast: 1 + Math.random() * 0.02 }).toBuffer()
+                logger.debug('contrast')
+                metadata.modulate({ contrast: 1.01 })
                 break
-
             case 'saturation':
-                imageData = await sharp(imageData).modulate({ saturation: 1 + Math.random() * 0.02 }).toBuffer()
-                break
-
-            case 'hue':
-                imageData = await sharp(imageData).modulate({ hue: Math.floor(Math.random() * 3.6) }).toBuffer()
-                break
-
-            case 'width':
-                imageData = await sharp(imageData).resize(metadata.width - 1 + Math.floor(Math.random() * 2), null, { withoutEnlargement: true }).toBuffer()
-                break
-
-            case 'height':
-                imageData = await sharp(imageData).resize(null, metadata.height - 1 + Math.floor(Math.random() * 2), { withoutEnlargement: true }).toBuffer()
+                logger.debug('saturation')
+                metadata.modulate({ saturation: 1.01 })
                 break
         }
 
-        return Buffer.from(imageData)
+        const buffer = await metadata.toBuffer()
+        logger.debug(`[processImageBuffer] ${logger.magenta((imageBuffer.length / 1024).toFixed(2) + "kb")} => ${logger.magenta((buffer.length / 1024).toFixed(2) + "kb")} ${logger.green(Date.now() - start + "ms")}`)
+        return buffer
     } catch (err) {
-        logger.warn(`处理图片发生错误！\n${err}\n请截图反馈开发者~`)
-        return Buffer.from(imageData)
+        logger.error(err)
+        return imageBuffer
+    }
+}
+
+/**
+ * 初始化代理（兼容7.0.x和5.0.x
+ * @param {String} proxyAddress - 代理地址
+ */
+function proxyAgent(proxyAddress) {
+    try {
+        const HttpsProxyAgentLatest = HttpsProxyAgent.HttpsProxyAgent
+        return new HttpsProxyAgentLatest(proxyAddress)
+    } catch {
+        return new HttpsProxyAgent(proxyAddress)
     }
 }
 
@@ -264,14 +235,9 @@ async function processImage(imageData) {
  * @returns {number} - 转换后的阿拉伯数字
  */
 function convertChineseNumberToArabic(
-    input,
-    ten = '',
-    parts = [],
-    result = '',
-    temp = false,
-    splitString = ''
+    input, ten, result, splitString = '', parts = [], temp = false
 ) {
-    if (!input && input != 0) return input
+    if (!input && Number(input) !== 0) return input
 
     if (/^\d+$/.test(input)) return Number(input)
 
